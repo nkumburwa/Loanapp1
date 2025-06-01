@@ -7,6 +7,9 @@ const { Pool } = require('pg');
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Middleware
+app.use(bodyParser.json());
+
 // PostgreSQL connection pool ukoresheje DATABASE_URL muri .env
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -14,8 +17,6 @@ const pool = new Pool({
     rejectUnauthorized: false // Neon/PostgreSQL cloud requires SSL
   }
 });
-
-app.use(bodyParser.json());
 
 // ================= Routes =================
 
@@ -32,11 +33,18 @@ app.get('/debtors', async (req, res) => {
 // POST new debtor
 app.post('/debtors', async (req, res) => {
   const { name, amount, paid = 0 } = req.body;
-  if (!name || !amount) {
+  if (!name || amount === undefined) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
-  const status = paid >= amount ? 'paid' : 'unpaid';
+  let status;
+  if (paid == 0) {
+    status = 'unpaid';
+  } else if (paid > 0 && paid < amount) {
+    status = 'partial';
+  } else {
+    status = 'paid';
+  }
 
   try {
     const insertQuery = `INSERT INTO debtors (name, amount, paid, status) VALUES ($1, $2, $3, $4) RETURNING *`;
@@ -47,19 +55,18 @@ app.post('/debtors', async (req, res) => {
   }
 });
 
-// PUT update debtor
+// PUT update paid only + status logic
 app.put('/debtors/:id', async (req, res) => {
   const id = req.params.id;
-  const { name, amount, paid = 0, status } = req.body;
+  const { paid } = req.body;
 
-  if (!name || !amount || !status) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  if (paid === undefined) {
+    return res.status(400).json({ error: 'Paid field is required.' });
   }
 
   try {
     const updateQuery = `UPDATE debtors SET name = $1, amount = $2, paid = $3, status = $4 WHERE id = $5`;
     await pool.query(updateQuery, [name, amount, paid, status, id]);
-    res.json({ message: 'Debtor updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
