@@ -65,8 +65,30 @@ app.put('/debtors/:id', async (req, res) => {
   }
 
   try {
-    const updateQuery = `UPDATE debtors SET name = $1, amount = $2, paid = $3, status = $4 WHERE id = $5`;
-    await pool.query(updateQuery, [name, amount, paid, status, id]);
+    // Fata amount ya debtor uri kuvugurura
+    const existing = await pool.query('SELECT amount FROM debtors WHERE id = $1', [id]);
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({ error: 'Debtor not found' });
+    }
+
+    const amount = parseFloat(existing.rows[0].amount);
+
+    // Reba status hashingiwe kuri paid vs amount
+    let newStatus;
+    if (paid == 0) {
+      newStatus = 'unpaid';
+    } else if (paid > 0 && paid < amount) {
+      newStatus = 'partial';
+    } else {
+      newStatus = 'paid';
+    }
+
+    // Update paid na status gusa
+    const updateQuery = `UPDATE debtors SET paid = $1, status = $2 WHERE id = $3`;
+    await pool.query(updateQuery, [paid, newStatus, id]);
+
+    res.json({ message: 'Paid updated successfully', paid, status: newStatus });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
