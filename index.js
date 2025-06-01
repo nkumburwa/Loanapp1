@@ -111,14 +111,17 @@ app.delete('/debtors/:id', async (req, res) => {
   }
 });
 
-// GET summary
+// GET summary with status breakdown
 app.get('/summary', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT 
         COUNT(*) AS total_debtors, 
         COALESCE(SUM(amount), 0) AS total_amount,
-        COALESCE(SUM(paid), 0) AS total_paid 
+        COALESCE(SUM(paid), 0) AS total_paid,
+        COUNT(CASE WHEN status = 'paid' THEN 1 END) AS fully_paid,
+        COUNT(CASE WHEN status = 'partial' THEN 1 END) AS partially_paid,
+        COUNT(CASE WHEN status = 'unpaid' THEN 1 END) AS unpaid
       FROM debtors
     `);
 
@@ -129,7 +132,10 @@ app.get('/summary', async (req, res) => {
       total_debtors: parseInt(summary.total_debtors),
       total_amount: parseFloat(summary.total_amount),
       total_paid: parseFloat(summary.total_paid),
-      total_unpaid: totalUnpaid > 0 ? totalUnpaid : 0
+      total_unpaid: totalUnpaid > 0 ? totalUnpaid : 0,
+      fully_paid: parseInt(summary.fully_paid),
+      partially_paid: parseInt(summary.partially_paid),
+      unpaid: parseInt(summary.unpaid)
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
